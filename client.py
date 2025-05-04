@@ -5,7 +5,7 @@ import signal
 
 def signal_handler(sig, frame):
     print("\nClient shutting down...")
-    sys.exit(0)
+    bitir_event.set()
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -19,7 +19,7 @@ sunucuadi = ''
 giris = sys.argv[1]  # Örn: "0.tcp.ngrok.io:10942"
 
 HOST, PORT = giris.split(":")
-PORT = int(PORT)  # Port her zaman int olmalı
+PORT = int(PORT)  
 BUFFER_SIZE = 1024
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -28,27 +28,33 @@ client.send(kullaniciadi.encode())
 sunucuadi = client.recv(BUFFER_SIZE).decode()
 print("Bağlantı başarılı!")
 
-def mesaj_gonder():
-    while True:
-            print("Mesaj girin:")
-            mesaj = input()
-            client.send(mesaj.encode())
-            print(f"\n{kullaniciadi}:{mesaj}")
+bitir_event = threading.Event()
 
+def mesaj_gonder():
+    while not bitir_event.is_set():
+        try:
+            mesaj = input("Mesaj girin: ")
+            client.send(mesaj.encode())
+            print(f"\n\033[32m{kullaniciadi}: {mesaj}\033[0m")
+        except:
+            return
 
 def mesaj_al():
-    while True:
+    while not bitir_event.is_set():
         try:
             cevap = client.recv(BUFFER_SIZE).decode()
             if cevap:
-                print(f"\n{sunucuadi}: {cevap}")
+                print(f"\n\033[31m{sunucuadi}: {cevap}\033[0m")
         except:
-            break
+            return
 
 
-threading.Thread(target=mesaj_gonder,).start()
-threading.Thread(target=mesaj_al,).start()
-
+t_ver = threading.Thread(target=mesaj_gonder,)
+t_ver.start()
+t_al = threading.Thread(target=mesaj_al,)
+t_al.start()
 
 while True:
-    pass
+    if bitir_event.is_set():
+        client.close()
+        sys.exit(0) 

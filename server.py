@@ -5,15 +5,16 @@ import signal
 import subprocess
 import re
 
+
 HOST = '0.0.0.0'
 PORT = 80
 BUFFER_SIZE = 1024
 kullaniciadi = '[SUNUCU] ' + socket.gethostname()
 istemciadi = ''
-
 def signal_handler(sig, frame):
     print("\nServer shutting down...")
     try:
+        subprocess.call(["taskkill", "/f", "/im", "ngrok.exe"])
         conn.close()
         server_socket.close()
     except:
@@ -38,7 +39,7 @@ def ngrok_tcp_tunel_olustur(port):
         elif "ERR" in line or "error" in line:
             print("[NGROK] Hata: " + line.strip())
     
-    return 0
+    return 
         
 ngrok_tcp_tunel_olustur(PORT)
 
@@ -53,39 +54,80 @@ print(f"Bağlantı alındı: {addr}")
 istemciadi = conn.recv(BUFFER_SIZE).decode()
 conn.send(kullaniciadi.encode())
 
+bitir_event = threading.Event()
+programi_bitir = threading.Event()
+
+
 def mesaj_al():
     while True:
         try:
             data = conn.recv(BUFFER_SIZE).decode()
             if not data:
-                print("\nİstemci bağlantıyı kapattı, yeni bağlantı bekleniyor...")
-                baglanti_al()
+                print("\nİstemci bağlantıyı kapattı.")
+                print("\nYeniden bağlanmak istiyor musunuz ?(y/n)")
+                bitir_event.set()
                 break
-            print(f"\n{istemciadi}: {data}")
+            print(f"\n\033[31m{istemciadi}: {data}\033[0m")
         except:
             break
-
 def mesaj_gonder():
     while True:
         try:
-            print("Mesaj girin:")
-            cevap = input()
-            conn.send(cevap.encode())
-            print(f"\n{kullaniciadi}: {cevap}")
+            if bitir_event.is_set():
+                while True:
+                    cevap = input("Yeniden bağlanmak istiyor musunuz? (y/n): ")
+                    if cevap.lower() == 'n':
+                         programi_bitir.set()
+                         return
+                    elif cevap.lower() == 'y':
+                        return  
+                    else:
+                        print("Lütfen sadece 'y' veya 'n' girin.")
+            else:
+                cevap = input("Mesaj girin: ")
+                if bitir_event.is_set():
+                    if cevap.lower() == 'y' or 'n':
+                        if cevap.lower() == 'n':
+                            programi_bitir.set()
+                            return
+                        elif cevap.lower() == 'y':
+                            return  
+                    else:
+                        continue
+                conn.send(cevap.encode())
+                print(f"\033[32m{kullaniciadi}: {cevap}\033[0m")
         except:
             break
 
+
 def baglanti_al():
-        server_socket.listen()
-        print(f"Sunucu başlatıldı. Port {PORT} dinleniyor...")
-        conn, addr = server_socket.accept()
-        print(f"Bağlantı alındı: {addr}")
-        istemciadi = conn.recv(BUFFER_SIZE).decode()
-        conn.send(kullaniciadi.encode())
+    global conn, istemciadi, t_al, t_ver
+    bitir_event.clear()
+    server_socket.listen()
+    print(f"Sunucu başlatıldı. Port {PORT} dinleniyor...")
+    conn, addr = server_socket.accept()
+    print(f"Bağlantı alındı: {addr}")
+    istemciadi = conn.recv(BUFFER_SIZE).decode()
+    conn.send(kullaniciadi.encode())
 
-threading.Thread(target=mesaj_al,).start()
-threading.Thread(target=mesaj_gonder,).start()
+    t_al = threading.Thread(target=mesaj_al)
+    t_al.start()
+    t_ver = threading.Thread(target=mesaj_gonder)
+    t_ver.start()
+    
 
+
+t_al=threading.Thread(target=mesaj_al,)
+t_al.start()
+t_ver=threading.Thread(target=mesaj_gonder,)
+t_ver.start()
 
 while True:
-    pass
+    t_al.join()
+    t_ver.join()
+    if programi_bitir.is_set():
+        subprocess.call(["taskkill", "/f", "/im", "ngrok.exe"])
+        sys.exit(0)
+    else:
+        baglanti_al()
+
