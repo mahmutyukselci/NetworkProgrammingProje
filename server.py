@@ -9,8 +9,8 @@ import re
 HOST = '0.0.0.0'
 PORT = 80
 BUFFER_SIZE = 1024
-kullaniciadi = '[SUNUCU] ' + socket.gethostname()
-istemciadi = ''
+username = '[SERVER] ' + socket.gethostname()
+clientname = ''
 def signal_handler(sig, frame):
     print("\nServer shutting down...")
     try:
@@ -23,111 +23,110 @@ def signal_handler(sig, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-def ngrok_tcp_tunel_olustur(port):
-    print("TCP tüneli aktifleştiriliyor...")
-    komut = ["ngrok", "tcp", str(port), "--log=stdout"]
-    proc = subprocess.Popen(komut, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+def create_ngrok_tcp_tunnel(port):
+    print("Activating TCP tunnel...")
+    command = ["ngrok", "tcp", str(port), "--log=stdout"]
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     for line in proc.stdout:
         if "msg=\"started tunnel\"" in line and "url=tcp://" in line:
             match = re.search(r'url=tcp://(.+?):(\d+)', line)
             if match:
-                print("Başarılı!")
+                print("Success!")
                 host, forwarded_port = match.groups()
-                print(f"[NGROK] Bağlantı adresi: {host}, Port: {forwarded_port}")
+                print(f"[NGROK] Connection address: {host}, Port: {forwarded_port}")
                 return 1
         elif "ERR" in line or "error" in line:
-            print("[NGROK] Hata: " + line.strip())
+            print("[NGROK] Error: " + line.strip())
     
     return 
         
-ngrok_tcp_tunel_olustur(PORT)
+create_ngrok_tcp_tunnel(PORT)
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind((HOST, PORT))
 server_socket.listen()
-print(f"Sunucu başlatıldı. Port {PORT} dinleniyor...")
+print(f"Server started. Listening on port {PORT}...")
 
 conn, addr = server_socket.accept()
-print(f"Bağlantı alındı: {addr}")
+print(f"Connection received: {addr}")
 
-istemciadi = conn.recv(BUFFER_SIZE).decode()
-conn.send(kullaniciadi.encode())
+clientname = conn.recv(BUFFER_SIZE).decode()
+conn.send(username.encode())
 
-bitir_event = threading.Event()
-programi_bitir = threading.Event()
+end_event = threading.Event()
+exit_program = threading.Event()
 
 
-def mesaj_al():
+def receive_message():
     while True:
         try:
             data = conn.recv(BUFFER_SIZE).decode()
             if not data:
-                print("\nİstemci bağlantıyı kapattı.")
-                print("\nYeniden bağlanmak istiyor musunuz ?(y/n)")
-                bitir_event.set()
+                print("\nClient closed the connection.")
+                print("\nDo you want to reconnect? (y/n)")
+                end_event.set()
                 break
-            print(f"\n\033[31m{istemciadi}: {data}\033[0m")
+            print(f"\n\033[31m{clientname}: {data}\033[0m")
         except:
             break
-def mesaj_gonder():
+def send_message():
     while True:
         try:
-            if bitir_event.is_set():
+            if end_event.is_set():
                 while True:
-                    cevap = input("Yeniden bağlanmak istiyor musunuz? (y/n): ")
-                    if cevap.lower() == 'n':
-                         programi_bitir.set()
+                    answer = input("Do you want to reconnect? (y/n): ")
+                    if answer.lower() == 'n':
+                         exit_program.set()
                          return
-                    elif cevap.lower() == 'y':
+                    elif answer.lower() == 'y':
                         return  
                     else:
-                        print("Lütfen sadece 'y' veya 'n' girin.")
+                        print("Please enter only 'y' or 'n'.")
             else:
-                cevap = input("Mesaj girin: ")
-                if bitir_event.is_set():
-                    if cevap.lower() == 'y' or 'n':
-                        if cevap.lower() == 'n':
-                            programi_bitir.set()
+                answer = input("Enter message: ")
+                if end_event.is_set():
+                    if answer.lower() == 'y' or 'n':
+                        if answer.lower() == 'n':
+                            exit_program.set()
                             return
-                        elif cevap.lower() == 'y':
+                        elif answer.lower() == 'y':
                             return  
                     else:
                         continue
-                conn.send(cevap.encode())
-                print(f"\033[32m{kullaniciadi}: {cevap}\033[0m")
+                conn.send(answer.encode())
+                print(f"\033[32m{username}: {answer}\033[0m")
         except:
             break
 
 
-def baglanti_al():
-    global conn, istemciadi, t_al, t_ver
-    bitir_event.clear()
+def accept_connection():
+    global conn, clientname, t_receive, t_send
+    end_event.clear()
     server_socket.listen()
-    print(f"Sunucu başlatıldı. Port {PORT} dinleniyor...")
+    print(f"Server started. Listening on port {PORT}...")
     conn, addr = server_socket.accept()
-    print(f"Bağlantı alındı: {addr}")
-    istemciadi = conn.recv(BUFFER_SIZE).decode()
-    conn.send(kullaniciadi.encode())
+    print(f"Connection received: {addr}")
+    clientname = conn.recv(BUFFER_SIZE).decode()
+    conn.send(username.encode())
 
-    t_al = threading.Thread(target=mesaj_al)
-    t_al.start()
-    t_ver = threading.Thread(target=mesaj_gonder)
-    t_ver.start()
+    t_receive = threading.Thread(target=receive_message)
+    t_receive.start()
+    t_send = threading.Thread(target=send_message)
+    t_send.start()
     
 
 
-t_al=threading.Thread(target=mesaj_al,)
-t_al.start()
-t_ver=threading.Thread(target=mesaj_gonder,)
-t_ver.start()
+t_receive=threading.Thread(target=receive_message,)
+t_receive.start()
+t_send=threading.Thread(target=send_message,)
+t_send.start()
 
 while True:
-    t_al.join()
-    t_ver.join()
-    if programi_bitir.is_set():
+    t_receive.join()
+    t_send.join()
+    if exit_program.is_set():
         subprocess.call(["taskkill", "/f", "/im", "ngrok.exe"])
         sys.exit(0)
     else:
-        baglanti_al()
-
+        accept_connection()

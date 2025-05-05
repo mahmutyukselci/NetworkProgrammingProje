@@ -5,56 +5,53 @@ import signal
 
 def signal_handler(sig, frame):
     print("\nClient shutting down...")
-    bitir_event.set()
-
+    end_event.set()
+    
 signal.signal(signal.SIGINT, signal_handler)
 
 if len(sys.argv) < 2:
-    print("Kullanım: python client.py <IP:PORT>")
+    print("Usage: python client.py <IP:PORT>")
     sys.exit(1)
-
-kullaniciadi = '[ISTEMCI]'+socket.gethostname()
-sunucuadi = ''
-
-giris = sys.argv[1]  # Örn: "0.tcp.ngrok.io:10942"
-
-HOST, PORT = giris.split(":")
+    
+username = '[CLIENT]'+socket.gethostname()
+servername = ''
+input_address = sys.argv[1]  # Example: "0.tcp.ngrok.io:10942"
+HOST, PORT = input_address.split(":")
 PORT = int(PORT)  
 BUFFER_SIZE = 1024
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect((HOST, PORT))
-client.send(kullaniciadi.encode())
-sunucuadi = client.recv(BUFFER_SIZE).decode()
-print("Bağlantı başarılı!")
+client.send(username.encode())
+servername = client.recv(BUFFER_SIZE).decode()
+print("Connection successful!")
 
-bitir_event = threading.Event()
+end_event = threading.Event()
 
-def mesaj_gonder():
-    while not bitir_event.is_set():
+def send_message():
+    while not end_event.is_set():
         try:
-            mesaj = input("Mesaj girin: ")
-            client.send(mesaj.encode())
-            print(f"\n\033[32m{kullaniciadi}: {mesaj}\033[0m")
+            message = input("Enter message: ")
+            client.send(message.encode())
+            print(f"\n\033[32m{username}: {message}\033[0m")
         except:
             return
-
-def mesaj_al():
-    while not bitir_event.is_set():
+            
+def receive_message():
+    while not end_event.is_set():
         try:
-            cevap = client.recv(BUFFER_SIZE).decode()
-            if cevap:
-                print(f"\n\033[31m{sunucuadi}: {cevap}\033[0m")
+            answer = client.recv(BUFFER_SIZE).decode()
+            if answer:
+                print(f"\n\033[31m{servername}: {answer}\033[0m")
         except:
             return
-
-
-t_ver = threading.Thread(target=mesaj_gonder,)
-t_ver.start()
-t_al = threading.Thread(target=mesaj_al,)
-t_al.start()
+            
+t_send = threading.Thread(target=send_message,)
+t_send.start()
+t_receive = threading.Thread(target=receive_message,)
+t_receive.start()
 
 while True:
-    if bitir_event.is_set():
+    if end_event.is_set():
         client.close()
-        sys.exit(0) 
+        sys.exit(0)
