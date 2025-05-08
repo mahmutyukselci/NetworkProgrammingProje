@@ -8,7 +8,7 @@ from tkinter import ttk
 import time
 
 
-FILE_BUFFER_SIZE = 4096  # 256 KB
+FILE_BUFFER_SIZE = 4096  
     
 def file_transfer_gui():
     window = tk.Tk()
@@ -28,29 +28,28 @@ def send_file(file_path, target_conn,file_confirmation):
     file_size = os.path.getsize(file_path)
     file_name = os.path.basename(file_path)
 
-    # First send request to receiver
     target_conn.send(f"/sendfile {file_name} {file_size}".encode())
 
     print(f"File sending request for '{file_name}' has been sent. Waiting for confirmation...")
     
-        
     file_confirmation.wait()
-    
-
+   
     if file_confirmation.is_set():
         print("CONFIRMED!Transfer starting...")
     else:
         print("File transfer rejected!")
         return
     window, bar = file_transfer_gui()
+    
+    time.sleep(1)
 
-    with open(file_path, 'rb') as f:
+    with open(file_path, 'r') as f:
         sent = 0
         while True:
             chunk = f.read(FILE_BUFFER_SIZE)
-            if not chunk:
+            if not chunk: 
                 break
-            target_conn.send(chunk)
+            target_conn.send(chunk.encode())
             sent += len(chunk)
             bar['value'] = (sent / file_size) * 100
             window.update()
@@ -62,12 +61,13 @@ def send_file(file_path, target_conn,file_confirmation):
         
 def receive_file(conn, save_path, file_size):
     print("Receiving file...")
-    with open(save_path, 'wb') as f:
+    with open(save_path, 'w') as f:
         received = 0
         while received < file_size:
-            chunk = conn.recv(min(FILE_BUFFER_SIZE, file_size - received))
+            chunk = conn.recv(FILE_BUFFER_SIZE).decode() 
             if not chunk:
-                break
+                print("DATA IS NOT VALID")
+                return
             f.write(chunk)
             received += len(chunk)
     print(f"File received: {save_path}")

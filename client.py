@@ -6,6 +6,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 import functions
+import time
 
 
 def signal_handler(sig, frame):
@@ -34,17 +35,26 @@ print("Connection successful!")
 end_event = threading.Event()
 file_confirmation = threading.Event()
 message_pause_event = threading.Event()
+file_receive_flag_event = threading.Event()
+
+file_name = ""
+file_size = ""
 
 def send_message():
     while not end_event.is_set():
         try:
             message = input("Enter message: ")
+            file_receive_flag_event.set()
             if message.startswith("/acceptfile"):
-                _, save_path ,file_size = message.split()
+                global file_size
+                global file_name
+                _, save_path = message.split()
                 message_pause_event.set()
                 time.sleep(0.1)
                 conn.send(message.encode())
-                functions.receive_file(conn,save_path,int(file_size))
+                file_size = int(file_size)
+                save_path = os.path.join(save_path, file_name)
+                functions.receive_file(conn,save_path,file_size)
                 message_pause_event.clear()
             elif message.startswith("/sendfile"):
                 _, file_path= message.split()
@@ -58,19 +68,29 @@ def send_message():
 def receive_message():
     while not end_event.is_set():
         if message_pause_event.is_set():
-            time.sleep(0.1)
+            time.sleep(1)
             continue
         try:
             data = conn.recv(BUFFER_SIZE).decode()
-            if data.startswith("/sendfile"):
+            if not data:
+                print("\nServer disconnected. Client shutting down...")
+                end_event.set()
+            elif data.startswith("/sendfile"):
+                global file_name
+                global file_size
                 _, file_name, file_size = data.split()
                 file_size = int(file_size)
                 print(f"{servername} wants to send a file named '{file_name}'. " f"To accept: /acceptfile <path>,to reject type anything")
+                file_receive_flag_event.clear()
+                while not file_receive_flag_event.is_set():
+                    time.sleep(0.2)
+                    continue
             elif data.startswith("/acceptfile"):
                 file_confirmation.set()
             elif data:
                 print(f"\n\033[31m{servername}: {data}\033[0m")
-        except:
+        except Exception as e:
+            print(f"Socket error: {e}")
             return
             
 t_send = threading.Thread(target=send_message,)
