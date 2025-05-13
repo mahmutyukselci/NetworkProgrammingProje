@@ -1,77 +1,63 @@
 import socket
 import sys
-import threading
-import signal
 import os
-import tkinter as tk
-from tkinter import ttk
 import functions
-import time
-
-
-def signal_handler(sig, frame):
-    print("\nClient shutting down...")
-    end_event.set()
-    
-signal.signal(signal.SIGINT, signal_handler)
-if len(sys.argv) < 2:
-    print("Usage: python client.py <IP:PORT>")
-    sys.exit(1)
+import asyncio
     
 username = '[CLIENT]'+socket.gethostname()
 servername = ''
-input_address = sys.argv[1]  # Example: "0.tcp.ngrok.io:10942"
+input_address = sys.argv[1] 
 HOST, PORT = input_address.split(":")
 PORT = int(PORT)  
 BUFFER_SIZE = 1024
 
-
 conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-conn.connect((HOST, PORT))
-conn.send(username.encode())
-servername = conn.recv(BUFFER_SIZE).decode()
-print("Connection successful!")
+servername = ""
 
-end_event = threading.Event()
-file_confirmation = threading.Event()
-message_pause_event = threading.Event()
-file_receive_flag_event = threading.Event()
+end_event = asyncio.Event()
+file_confirmation = asyncio.Event()
+message_pause_event = asyncio.Event()
+file_receive_flag_event = asyncio.Event()
 
 file_name = ""
 file_size = ""
 
-def send_message():
+async def send_message():
+    global conn
+    loop = asyncio.get_running_loop()
     while not end_event.is_set():
         try:
-            message = input("Enter message: ")
+            message = await asyncio.to_thread(input, "Enter message: ")
             file_receive_flag_event.set()
             if message.startswith("/acceptfile"):
                 global file_size
                 global file_name
                 _, save_path = message.split()
                 message_pause_event.set()
-                time.sleep(0.1)
-                conn.send(message.encode())
+                await asyncio.sleep(0.1)
+                await loop.run_in_executor(None, conn.send, message.encode())
                 file_size = int(file_size)
                 save_path = os.path.join(save_path, file_name)
-                functions.receive_file(conn,save_path,file_size)
+                await functions.receive_file(conn,save_path,file_size)
                 message_pause_event.clear()
             elif message.startswith("/sendfile"):
                 _, file_path= message.split()
-                functions.send_file(file_path,conn,file_confirmation)
+                await functions.send_file(file_path,conn,file_confirmation)
             else:
-                conn.send(message.encode())
+                await loop.run_in_executor(None, conn.send, message.encode())
                 print(f"\n\033[32m{username}: {message}\033[0m")
         except:
             return
             
-def receive_message():
+async def receive_message():
+    global conn
+    loop = asyncio.get_running_loop()
     while not end_event.is_set():
         if message_pause_event.is_set():
-            time.sleep(1)
+            await asyncio.sleep(1)
             continue
         try:
-            data = conn.recv(BUFFER_SIZE).decode()
+            data = (await loop.run_in_executor(None, conn.recv, BUFFER_SIZE)).decode()
             if not data:
                 print("\nServer disconnected. Client shutting down...")
                 end_event.set()
@@ -83,7 +69,7 @@ def receive_message():
                 print(f"{servername} wants to send a file named '{file_name}'. " f"To accept: /acceptfile <path>,to reject type anything")
                 file_receive_flag_event.clear()
                 while not file_receive_flag_event.is_set():
-                    time.sleep(0.2)
+                    await asyncio.sleep(0.2)
                     continue
             elif data.startswith("/acceptfile"):
                 file_confirmation.set()
@@ -93,12 +79,28 @@ def receive_message():
             print(f"Socket error: {e}")
             return
             
-t_send = threading.Thread(target=send_message,)
-t_send.start()
-t_receive = threading.Thread(target=receive_message,)
-t_receive.start()
-
-while True:
-    if end_event.is_set():
+async def main():
+    global conn,servername
+    conn.connect((HOST, PORT))
+    conn.send(username.encode())
+    servername = conn.recv(BUFFER_SIZE).decode()
+    print("Connection successful!")
+    send_task = asyncio.create_task(send_message())
+    receive_task = asyncio.create_task(receive_message())
+    await send_task
+    await receive_task
+    while True:
+        if end_event.is_set():
+            conn.close()
+            print("Client shutting down...")
+            sys.exit(0)
+        else:
+            pass
+            
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Client shutting down...")
         conn.close()
         sys.exit(0)
