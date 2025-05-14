@@ -1,0 +1,37 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install py2app
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install py2app
+
+      - name: Build the .app
+        run: |
+          python3 setup.py py2app
+
+      - name: Archive the .app
+        run: |
+          cd dist
+          zip -r NetworkApp.zip *.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetworkProgrammingApp
+          path: dist/NetworkApp.zip
