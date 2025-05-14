@@ -1,5 +1,5 @@
 Onefile .exe and .app versions added windows users can directly download 
-MacOs users can downloadn from actions artifacts https://github.com/mahmutyukselci/NetworkProgrammingProje/actions/runs/15026869358/artifacts/3124774812
+MacOs users can download from actions artifacts https://github.com/mahmutyukselci/NetworkProgrammingProje/actions/runs/15026869358/artifacts/3124774812
 
 For client.py to work you just need Python installed on your device.
 You can use it like "python client.py <IP:PORT>"
