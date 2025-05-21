@@ -61,6 +61,7 @@ async def receive_message():
             if not data:
                 print("\nServer disconnected. Client shutting down...")
                 end_event.set()
+                return
             elif data.startswith("/sendfile"):
                 global file_name
                 global file_size
@@ -89,13 +90,13 @@ async def main():
     receive_task = asyncio.create_task(receive_message())
     await send_task
     await receive_task
-    while True:
-        if end_event.is_set():
-            conn.close()
-            print("Client shutting down...")
-            sys.exit(0)
-        else:
-            pass
+    await asyncio.sleep(0.1)
+    if end_event.is_set():
+        conn.close()
+        print("Client shutting down...")
+        sys.exit(0)
+    else:
+        pass
             
 if __name__ == "__main__":
     try:

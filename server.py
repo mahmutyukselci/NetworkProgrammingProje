@@ -128,7 +128,7 @@ async def receive_message():
                     print("\nClient closed the connection.")
                     print("\nDo you want to reconnect? (y/n)")
                     end_event.set()
-                    break
+                    return
                 elif data.startswith("/sendfile"):
                     global file_name
                     global file_size
@@ -155,14 +155,15 @@ async def main():
     receive_task = asyncio.create_task(receive_message())
     await send_task
     await receive_task
-    while True:
-        if exit_program.is_set():
-            subprocess.call(["taskkill", "/f", "/im", "ngrok.exe"])
-            sys.exit(0)
-        elif end_event.is_set():
-            await accept_connection()
-        else:
-            pass
+    await asyncio.sleep(0.1)
+    if exit_program.is_set():
+        subprocess.call(["taskkill", "/f", "/im", "ngrok.exe"])
+        sys.exit(0)
+    elif end_event.is_set():
+        await accept_connection()
+    else:
+        print("Unknown error occured seek help")
+        return
 if __name__ == "__main__":
     try:
         asyncio.run(main())
